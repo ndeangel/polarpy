@@ -2,24 +2,34 @@ import h5py
 import numba as nb
 import numpy as np
 from interpolation.splines import eval_linear
+from tqdm import tqdm
 
 #import scipy.interpolate as interpolate
 
 
-spec = [
-    ("_values", nb.float64[:, :, :]),
-    (
-        "_grid",
-        nb.typeof(
-            (
-                np.zeros(3, dtype=np.float64),
-                np.zeros(3, dtype=np.float64),
-                np.zeros(3, dtype=np.float64),
-            )
-        ),
-    ),
-]
+energy_resolved = "pdheavyside" #None
 
+if not energy_resolved:  # 3 parameters
+    spec = [
+        ("_values", nb.float64[:, :, :]),
+        (
+            "_grid",
+            nb.typeof(
+                (np.zeros(3, dtype=np.float64), np.zeros(3, dtype=np.float64), np.zeros(3, dtype=np.float64),)
+            ),
+        ),
+    ]
+
+elif energy_resolved == "pdheavyside":  # 5 parameters
+    spec = [
+        ("_values", nb.float64[:, :, :, :, :]),
+        (
+            "_grid",
+            nb.typeof(
+                (np.zeros(5, dtype=np.float64), np.zeros(5, dtype=np.float64), np.zeros(5, dtype=np.float64), np.zeros(5, dtype=np.float64), np.zeros(5, dtype=np.float64),)
+            ),
+        ),
+    ]
 
 @nb.jitclass(spec)
 class FastGridInterpolate(object):
@@ -93,12 +103,51 @@ class PolarResponse(object):
             # functions that are called during the fit.
             # we use some nice matrix math to handle this
 
+            matrix = np.array(f['matrix'][()])
+
+            print("Computing interpolation grid...")
+            pbar = tqdm(total=len(bin_center))
             for i, bm in enumerate(bin_center):
 
-                this_interpolator = FastGridInterpolate(
-                    (energy, pol_ang, pol_deg), f['matrix'][..., i])
+                if not energy_resolved:
+                    this_interpolator = FastGridInterpolate((energy, pol_ang, pol_deg),
+                                                            matrix[..., i])  # energy, PA, PD
 
+                elif energy_resolved == "pdheavyside":
+
+                    # ene_break = np.arange(100., 501., 5.)
+
+                    rsp_matrix = []
+                    for pdlow in range(len(pol_deg)):
+                        pdhigh_rsp = []
+                        for pdhigh in range(len(pol_deg)):
+                            enebreak_mask = energy[:, None][19:-50] < energy  # [19:-50] -> break b/w 100 and 500 keV
+                            pdlow_idx = pdlow * np.ones_like(enebreak_mask, dtype=int)
+                            pdhigh_idx = pdhigh * np.ones_like(enebreak_mask, dtype=int)
+                            pd_idx = np.where(enebreak_mask, pdhigh_idx, pdlow_idx)
+                            enebreak_rsp = matrix[np.arange(len(energy)), :, pd_idx, i]
+                            pdhigh_rsp.append(enebreak_rsp)
+                        rsp_matrix.append(pdhigh_rsp)
+
+                    """rsp_matrix = []  # pdlow, pdhigh, ebreak, energy, PA
+                    for pdlow in range(len(pol_deg)):
+                        pdhigh_rsp = []
+                        for pdhigh in range(len(pol_deg)):
+                            enebreak_rsp = []
+                            for enebreak in energy[19:-50]:
+                                enebreak_rsp.append([matrix[n, :, pdlow, i] if energy[n]<enebreak else matrix[n, :, pdhigh, i] for n in range(len(energy))])
+                            pdhigh_rsp.append(enebreak_rsp)
+                        rsp_matrix.append(pdhigh_rsp)"""
+
+                    rsp_matrix = np.array(rsp_matrix).transpose(3, 0, 1, 2, 4)  # energy first
+
+                    this_interpolator = FastGridInterpolate((energy, pol_deg, pol_deg, energy[19:-50], pol_ang),
+                                                            rsp_matrix)  # energy, pdlow, pdhigh, ebreak, PA
+
+                pbar.update(1)
                 all_interp.append(this_interpolator)
+            pbar.close()
+
 
             # finally we attach all of this to the class
 

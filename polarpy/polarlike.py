@@ -311,6 +311,12 @@ class PolarLike(PluginPrototype):
             if 'polarization.angle' in k:
                 self._pol_angle = v
 
+            if 'polarization.deg_high' in k:  # pdheavyside
+                self._pol_deg_high = v
+
+            if 'polarization.ebreak' in k:  # pdheavyside
+                self._ebreak = v
+
         # now we need to get the intergal flux
 
         _, integral = self._get_diff_flux_and_integral(
@@ -361,8 +367,11 @@ class PolarLike(PluginPrototype):
             [self._integral_flux(emin, emax) for emin, emax in zip(self._response.ene_lo, self._response.ene_hi)])
 
         # we evaluate at the center of the bin. the bin widths are already included
+        """eval_points = np.array(
+            [[ene, self._pol_angle.value, self._pol_degree.value] for ene in self._response.energy_mid])"""
         eval_points = np.array(
-            [[ene, self._pol_angle.value, self._pol_degree.value] for ene in self._response.energy_mid])
+            [[ene, self._pol_degree.value, self._pol_deg_high.value, self._ebreak.value, self._pol_angle.value] for ene in
+             self._response.energy_mid])  # pdheavyside
 
         # expectation = []
         
