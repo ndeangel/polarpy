@@ -102,7 +102,7 @@ class ModulationCurveFile(object):
 
             n_intervals = int(f.attrs['n_intervals'])
             is_poisson = bool(f.attrs['is_poisson'])
-            scattering_bins = f['scattering_bins'].value
+            scattering_bins = f['scattering_bins'][()]
             mission = f.attrs['mission']
             instrument = f.attrs['instrument']
             scale_factor = f.attrs['scale_factor']
@@ -126,11 +126,11 @@ class ModulationCurveFile(object):
             for interval in range(n_intervals):
                 int_grp = f['interval_%d' % interval]
 
-                counts.append(int_grp['counts'].value)
+                counts.append(int_grp['counts'][()])
                 exposures.append(int_grp.attrs['exposure'])
 
                 if not is_poisson:
-                    count_errors.append(int_grp['count_errors'].value)
+                    count_errors.append(int_grp['count_errors'][()])
 
                 if tstart_flag:
                     try:
